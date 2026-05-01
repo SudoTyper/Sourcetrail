@@ -1,0 +1,15 @@
+diff --git a/src/corelib/thread/qyieldcpu.h b/src/corelib/thread/qyieldcpu.h
+--- a/src/corelib/thread/qyieldcpu.h
++++ b/src/corelib/thread/qyieldcpu.h
+@@ -33,7 +33,10 @@ void qYieldCpu(void)
+     noexcept
+ #endif
+ {
+-#if __has_builtin(__yield)
++// Apple Clang can report __has_builtin(__yield) without providing a declaration,
++// which breaks Qt bootstrap with -Werror,-Wimplicit-function-declaration.
++// Prefer the ARM paths below on Apple arm64.
++#if __has_builtin(__yield) && !(defined(__APPLE__) && defined(__aarch64__))
+     __yield();              // Generic
+ #elif defined(_YIELD_PROCESSOR) && defined(Q_CC_MSVC)
+     _YIELD_PROCESSOR();     // Generic; MSVC's <atomic>
