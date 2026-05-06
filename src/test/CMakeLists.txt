@@ -28,6 +28,7 @@ add_executable(Sourcetrail_test
 	MessageQueueTestSuite.cpp
 	NetworkProtocolHelperTestSuite.cpp
 	PlatformTestSuite.cpp
+	PythonIndexerTestSuite.cpp
 	QtActionsTestSuite.cpp
 	QtResourcesTestSuite.cpp
 	RefreshInfoGeneratorTestSuite.cpp
@@ -45,7 +46,7 @@ add_executable(Sourcetrail_test
 	UtilityEnumTestSuite.cpp
 	UtilityGradleTestSuite.cpp
 	UtilityMavenTestSuite.cpp
-	ToolChainTestSuite.cpp
+	UtilitySourceGroupCxxTestSuite.cpp
 	UtilityStringTestSuite.cpp
 	Vector2TestSuite.cpp
 

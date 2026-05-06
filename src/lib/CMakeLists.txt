@@ -1,6 +1,5 @@
 add_library(Sourcetrail_lib
 	${CMAKE_CURRENT_BINARY_DIR}/language_packages.h
-	${CMAKE_CURRENT_BINARY_DIR}/productVersion.h
 
 	app/paths/AppPath.cpp
 	app/paths/AppPath.h
@@ -578,11 +577,9 @@ add_library(Sourcetrail_lib
 
 	utility/ConfigManager.cpp
 	utility/ConfigManager.h
-	utility/Id.cpp
-	utility/Id.h
-	utility/LoopThread.h 
-	utility/LoopThread.cpp
 	utility/LowMemoryStringMap.h
+	utility/LoopThread.cpp
+	utility/LoopThread.h
 	utility/OrderedCache.h
 	utility/Platform.cpp
 	utility/Platform.h
@@ -593,13 +590,13 @@ add_library(Sourcetrail_lib
 	utility/SingleValueCache.h
 	utility/TimeStamp.cpp
 	utility/TimeStamp.h
-	utility/Tree.h
-	utility/UnorderedCache.h
-	utility/Version.cpp
-	utility/Version.h
 	utility/tracing.cpp
 	utility/tracing.h
+	utility/Tree.h
 	utility/types.h
+	utility/Id.h
+	utility/Id.cpp
+	utility/UnorderedCache.h
 	utility/utility.cpp
 	utility/utility.h
 	utility/utilityEnum.h
@@ -611,6 +608,8 @@ add_library(Sourcetrail_lib
 	utility/utilityUuid.h
 	utility/utilityXml.cpp
 	utility/utilityXml.h
+	utility/Version.cpp
+	utility/Version.h
 )
 setDefaultTargetOptions(Sourcetrail_lib)
 
@@ -729,6 +728,22 @@ if (BUILD_JAVA_LANGUAGE_PACKAGE)
 	)
 endif()
 
+if (BUILD_PYTHON_LANGUAGE_PACKAGE)
+	target_sources(Sourcetrail_lib
+		PRIVATE
+			settings/source_group/component/python/SourceGroupSettingsWithPythonEnvironmentPath.cpp
+			settings/source_group/component/python/SourceGroupSettingsWithPythonEnvironmentPath.h
+			settings/source_group/component/python/SourceGroupSettingsWithSourceExtensionsPython.h
+
+			settings/source_group/type/SourceGroupSettingsPythonEmpty.h
+	)
+	target_include_directories(Sourcetrail_lib
+		PUBLIC
+			settings/source_group/component/python
+			settings/source_group/type
+	)
+endif()
+
 target_include_directories(Sourcetrail_lib
 	PUBLIC
 		.
@@ -743,6 +758,7 @@ target_link_libraries(Sourcetrail_lib
 
 		$<$<BOOL:${BUILD_CXX_LANGUAGE_PACKAGE}>:Sourcetrail_lib_cxx>
 		$<$<BOOL:${BUILD_JAVA_LANGUAGE_PACKAGE}>:Sourcetrail_lib_java>
+		$<$<BOOL:${BUILD_PYTHON_LANGUAGE_PACKAGE}>:Sourcetrail_lib_python>
 
 		External_lib_tinyxml
 		External_lib_cppsqlite3

@@ -1,6 +1,7 @@
 #include "ResourcePaths.h"
 
 #include "AppPath.h"
+#include "Platform.h"
 
 FilePath ResourcePaths::getColorSchemesDirectoryPath()
 {
@@ -27,7 +28,18 @@ FilePath ResourcePaths::getJavaDirectoryPath()
 	return AppPath::getSharedDataDirectoryPath().concatenate("data/java/");
 }
 
+FilePath ResourcePaths::getPythonDirectoryPath()
+{
+	return AppPath::getSharedDataDirectoryPath().concatenate("data/python/");
+}
+
 FilePath ResourcePaths::getCxxCompilerHeaderDirectoryPath()
 {
 	return AppPath::getSharedDataDirectoryPath().concatenate("data/cxx/include/").getCanonical();
+}
+
+FilePath ResourcePaths::getPythonIndexerFilePath()
+{
+	return getPythonDirectoryPath().concatenate(
+		"SourcetrailPythonIndexer" + utility::Platform::getExecutableExtension());
 }

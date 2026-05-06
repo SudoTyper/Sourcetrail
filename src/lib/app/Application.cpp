@@ -5,8 +5,10 @@
 #include "ApplicationSettings.h"
 #include "ColorScheme.h"
 #include "DialogView.h"
+#include "FileLogger.h"
 #include "GraphViewStyle.h"
 #include "IDECommunicationController.h"
+#include "LogManager.h"
 #include "MainView.h"
 #include "MessageFilterErrorCountUpdate.h"
 #include "MessageFilterFocusInOut.h"
@@ -22,6 +24,7 @@
 #include "TabIds.h"
 #include "TaskManager.h"
 #include "UserPaths.h"
+#include "Version.h"
 #include "ViewFactory.h"
 #include "logging.h"
 #include "tracing.h"
@@ -29,11 +32,11 @@
 
 std::shared_ptr<Application> Application::s_instance;
 std::string Application::s_uuid;
-bool Application::s_previousSendMessagesAsTasks = false;
 
-void Application::createInstance(ViewFactory* viewFactory, NetworkFactory* networkFactory)
+void Application::createInstance(const Version& version, ViewFactory* viewFactory, NetworkFactory* networkFactory)
 {
 	bool hasGui = (viewFactory != nullptr);
+	(void)version;
 
 	if (hasGui)
 	{
@@ -64,7 +67,8 @@ void Application::createInstance(ViewFactory* viewFactory, NetworkFactory* netwo
 
 	if (networkFactory != nullptr)
 	{
-		s_instance->m_ideCommunicationController = networkFactory->createIDECommunicationController(s_instance->m_storageCache.get());
+		s_instance->m_ideCommunicationController = networkFactory->createIDECommunicationController(
+			s_instance->m_storageCache.get());
 		s_instance->m_ideCommunicationController->startListening();
 	}
 
@@ -79,28 +83,10 @@ std::shared_ptr<Application> Application::getInstance()
 void Application::destroyInstance()
 {
 	MessageQueue::getInstance()->stopLoopThread();
-
-	// It's important to reset this to the previous value (i.e. false), otherwise the MessageQueue tests will fail!
-	MessageQueue::getInstance()->setSendMessagesAsTasks(s_previousSendMessagesAsTasks);
-
 	TaskManager::destroyScheduler(TabIds::background());
 	TaskManager::destroyScheduler(TabIds::app());
 
 	s_instance.reset();
-}
-
-void Application::startMessagingAndScheduling()
-{
-	TaskManager::getScheduler(TabIds::app())->startLoopThread();
-	TaskManager::getScheduler(TabIds::background())->startLoopThread();
-
-	std::shared_ptr<MessageQueue> queue = MessageQueue::getInstance();
-	queue->addMessageFilter(std::make_shared<MessageFilterErrorCountUpdate>());
-	queue->addMessageFilter(std::make_shared<MessageFilterFocusInOut>());
-	queue->addMessageFilter(std::make_shared<MessageFilterSearchAutocomplete>());
-
-	s_previousSendMessagesAsTasks = queue->setSendMessagesAsTasks(true);
-	queue->startLoopThread();
 }
 
 std::string Application::getUUID()
@@ -120,6 +106,15 @@ void Application::loadSettings()
 	std::shared_ptr<ApplicationSettings> settings = ApplicationSettings::getInstance();
 	settings->load(UserPaths::getAppSettingsFilePath());
 	MessageTextEncodingChanged(settings->getTextEncoding()).dispatch();
+
+	LogManager::getInstance()->setLoggingEnabled(settings->getLoggingEnabled());
+	Logger* logger = LogManager::getInstance()->getLoggerByType("FileLogger");
+	if (logger != nullptr)
+	{
+		auto *fileLogger = dynamic_cast<FileLogger*>(logger);
+		fileLogger->setLogDirectory(settings->getLogDirectoryPath());
+		fileLogger->setFileName(FileLogger::generateDatedFileName("log"));
+	}
 
 	loadStyle(settings->getColorSchemePath());
 }
@@ -170,7 +165,7 @@ bool Application::isProjectLoaded() const
 	return false;
 }
 
-bool Application::hasGUI() const
+bool Application::hasGUI()
 {
 	return m_hasGUI;
 }
@@ -263,7 +258,7 @@ void Application::handleMessage(MessageLoadProject* message)
 		if (message->settingsChanged && m_hasGUI)
 		{
 			m_project->setStateOutdated();
-			refreshProject(RefreshMode::ALL_FILES);
+			refreshProject(RefreshMode::ALL_FILES, message->shallowIndexingRequested);
 		}
 	}
 	else
@@ -330,7 +325,7 @@ void Application::handleMessage(MessageLoadProject* message)
 
 		if (message->refreshMode != RefreshMode::NONE)
 		{
-			refreshProject(message->refreshMode);
+			refreshProject(message->refreshMode, message->shallowIndexingRequested);
 		}
 	}
 }
@@ -339,7 +334,7 @@ void Application::handleMessage(MessageRefresh* message)
 {
 	TRACE("app refresh");
 
-	refreshProject(message->all ? RefreshMode::ALL_FILES : RefreshMode::UPDATED_FILES);
+	refreshProject(message->all ? RefreshMode::ALL_FILES : RefreshMode::UPDATED_FILES, false);
 }
 
 void Application::handleMessage(MessageRefreshUI* message)
@@ -369,6 +364,19 @@ void Application::handleMessage(MessageSwitchColorScheme* message)
 	MessageRefreshUI().noStyleReload().dispatch();
 }
 
+void Application::startMessagingAndScheduling()
+{
+	TaskManager::getScheduler(TabIds::app())->startLoopThread();
+	TaskManager::getScheduler(TabIds::background())->startLoopThread();
+
+	MessageQueue* queue = MessageQueue::getInstance().get();
+	queue->addMessageFilter(std::make_shared<MessageFilterErrorCountUpdate>());
+	queue->addMessageFilter(std::make_shared<MessageFilterFocusInOut>());
+	queue->addMessageFilter(std::make_shared<MessageFilterSearchAutocomplete>());
+
+	queue->setSendMessagesAsTasks(true);
+	queue->startLoopThread();
+}
 
 void Application::loadWindow(bool showStartWindow)
 {
@@ -390,11 +398,12 @@ void Application::loadWindow(bool showStartWindow)
 	}
 }
 
-void Application::refreshProject(RefreshMode refreshMode)
+void Application::refreshProject(RefreshMode refreshMode, bool shallowIndexingRequested)
 {
 	if (m_project && checkSharedMemory())
 	{
-		m_project->refresh(getDialogView(DialogView::UseCase::INDEXING), refreshMode);
+		m_project->refresh(
+			getDialogView(DialogView::UseCase::INDEXING), refreshMode, shallowIndexingRequested);
 
 		if (!m_hasGUI && !m_project->isIndexing())
 		{

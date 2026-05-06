@@ -123,17 +123,24 @@ void QtDialogView::startIndexingDialog(
 	Project* project,
 	const std::vector<RefreshMode>& enabledModes,
 	const RefreshMode initialMode,
+	bool enabledShallowOption,
+	bool initialShallowState,
 	std::function<void(const RefreshInfo& info)> onStartIndexing,
 	std::function<void()> onCancelIndexing)
 {
 	m_refreshInfos.clear();
+	m_shallowIndexingEnabled = initialShallowState;
 
 	m_onQtThread([=, this]() {
 		m_dialogsVisible = true;
 		m_windowStack.clearWindows();
 
 		QtIndexingStartDialog* window = createWindow<QtIndexingStartDialog>(
-			enabledModes, initialMode);
+			enabledModes, initialMode, enabledShallowOption, initialShallowState);
+
+		connect(window, &QtIndexingStartDialog::setShallowIndexing, [=, this](bool enabled) {
+			m_shallowIndexingEnabled = enabled;
+		});
 
 		std::function<void(RefreshMode)> onRefreshModeChanged = ([=, this](RefreshMode refreshMode) {
 			auto it = m_refreshInfos.find(refreshMode);
@@ -170,6 +177,7 @@ void QtDialogView::startIndexingDialog(
 
 		connect(window, &QtIndexingStartDialog::startIndexing, [=, this](RefreshMode refreshMode) {
 			RefreshInfo info = m_refreshInfos.find(refreshMode)->second;
+			info.shallow = m_shallowIndexingEnabled;
 			Task::dispatch(
 				TabIds::app(), std::make_shared<TaskLambda>([=]() { onStartIndexing(info); }));
 
@@ -250,7 +258,8 @@ DatabasePolicy QtDialogView::finishedIndexingDialog(
 	size_t totalFileCount,
 	float time,
 	ErrorCountInfo errorInfo,
-	bool interrupted)
+	bool interrupted,
+	bool shallow)
 {
 	DatabasePolicy policy = DATABASE_POLICY_UNKNOWN;
 	m_resultReady = false;
@@ -265,7 +274,8 @@ DatabasePolicy QtDialogView::finishedIndexingDialog(
 			completedFileCount,
 			totalFileCount,
 			time,
-			interrupted);
+			interrupted,
+			shallow);
 		window->updateErrorCount(errorInfo.total, errorInfo.fatal);
 		connect(window, &QtIndexingDialog::finished, [this, &policy]() {
 			setUIBlocked(false);

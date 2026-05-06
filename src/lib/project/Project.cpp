@@ -249,7 +249,8 @@ void Project::load(std::shared_ptr<DialogView> dialogView)
 	}
 }
 
-void Project::refresh(std::shared_ptr<DialogView> dialogView, RefreshMode refreshMode)
+void Project::refresh(
+	std::shared_ptr<DialogView> dialogView, RefreshMode refreshMode, bool shallowIndexingRequested)
 {
 	if (m_refreshStage != RefreshStageType::NONE)
 	{
@@ -350,6 +351,19 @@ void Project::refresh(std::shared_ptr<DialogView> dialogView, RefreshMode refres
 		refreshMode = RefreshMode::UPDATED_FILES;
 	}
 
+	bool allowsShallowIndexing = false;
+	for (const std::shared_ptr<SourceGroup>& sourceGroup: m_sourceGroups)
+	{
+		if (sourceGroup->getStatus() == SourceGroupStatusType::ENABLED &&
+			sourceGroup->allowsShallowIndexing())
+		{
+			allowsShallowIndexing = true;
+			break;
+		}
+	}
+
+	const bool useShallowIndexing = allowsShallowIndexing && shallowIndexingRequested;
+
 	if (m_hasGUI)
 	{
 		std::vector<RefreshMode> enabledModes = {RefreshMode::ALL_FILES};
@@ -363,12 +377,15 @@ void Project::refresh(std::shared_ptr<DialogView> dialogView, RefreshMode refres
 			this,
 			enabledModes,
 			refreshMode,
+			allowsShallowIndexing,
+			useShallowIndexing,
 			[this, dialogView](const RefreshInfo& info) { buildIndex(info, dialogView); },
 			[this]() { m_refreshStage = RefreshStageType::NONE; });
 	}
 	else
 	{
 		RefreshInfo info = getRefreshInfo(refreshMode);
+		info.shallow = useShallowIndexing;
 		buildIndex(info, dialogView);
 	}
 }
@@ -464,7 +481,9 @@ void Project::buildIndex(RefreshInfo info, std::shared_ptr<DialogView> dialogVie
 					}
 					else
 					{
+						const bool shallow = info.shallow;
 						info = getRefreshInfo(RefreshMode::ALL_FILES);
+						info.shallow = shallow;
 					}
 				}
 
@@ -525,6 +544,13 @@ void Project::buildIndex(RefreshInfo info, std::shared_ptr<DialogView> dialogVie
 				customIndexerCommandProvider->addProvider(
 					sourceGroup->getIndexerCommandProvider(info));
 			}
+#if BUILD_PYTHON_LANGUAGE_PACKAGE
+			else if (sourceGroup->getType() == SourceGroupType::PYTHON_EMPTY)
+			{
+				customIndexerCommandProvider->addProvider(
+					sourceGroup->getIndexerCommandProvider(info));
+			}
+#endif	  // BUILD_PYTHON_LANGUAGE_PACKAGE
 			else
 			{
 				indexerCommandProvider->addProvider(sourceGroup->getIndexerCommandProvider(info));
@@ -534,7 +560,9 @@ void Project::buildIndex(RefreshInfo info, std::shared_ptr<DialogView> dialogVie
 
 	size_t sourceFileCount = indexerCommandProvider->size() + customIndexerCommandProvider->size();
 
-	taskSequential->addTask(std::make_shared<TaskSetValue<int>>("source_file_count", static_cast<int>(sourceFileCount)));
+	taskSequential->addTask(std::make_shared<TaskSetValue<bool>>("shallow_indexing", info.shallow));
+	taskSequential->addTask(std::make_shared<TaskSetValue<int>>(
+		"source_file_count", static_cast<int>(sourceFileCount)));
 	taskSequential->addTask(std::make_shared<TaskSetValue<int>>("indexed_source_file_count", 0));
 	taskSequential->addTask(std::make_shared<TaskSetValue<bool>>("interrupted_indexing", false));
 	taskSequential->addTask(std::make_shared<TaskSetValue<float>>("index_time", 0.0f));

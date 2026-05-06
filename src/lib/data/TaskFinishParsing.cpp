@@ -60,6 +60,9 @@ Task::TaskState TaskFinishParsing::doUpdate(std::shared_ptr<Blackboard> blackboa
 	bool interruptedIndexing = false;
 	blackboard->get("interrupted_indexing", interruptedIndexing);
 
+	bool shallowIndexing = false;
+	blackboard->get("shallow_indexing", shallowIndexing);
+
 	ErrorCountInfo errorInfo = m_storage->getErrorCount();
 
 	std::string status;
@@ -83,7 +86,8 @@ Task::TaskState TaskFinishParsing::doUpdate(std::shared_ptr<Blackboard> blackboa
 		stats.fileCount,
 		static_cast<float>(time),
 		errorInfo,
-		interruptedIndexing);
+		interruptedIndexing,
+		shallowIndexing);
 
 	MessageIndexingStatus(false).dispatch();
 

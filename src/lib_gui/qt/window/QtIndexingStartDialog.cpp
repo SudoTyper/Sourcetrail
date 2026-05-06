@@ -10,6 +10,8 @@
 QtIndexingStartDialog::QtIndexingStartDialog(
 	const std::vector<RefreshMode>& enabledModes,
 	const RefreshMode initialMode,
+	bool enabledShallowOption,
+	bool initialShallowState,
 	QWidget* parent)
 	: QtIndexingDialog(true, parent)
 {
@@ -48,7 +50,15 @@ QtIndexingStartDialog::QtIndexingStartDialog(
 				"last indexing, all updated files and all files "
 				"depending on those.<br /><br />"
 				"<b>All files:</b> Deletes the previous index and reindexes all files from "
-				"scratch.<br /><br />")));
+				"scratch.<br /><br />") +
+			(enabledShallowOption
+				 ? "<br /><b>Shallow Python Indexing:</b> References within your code base (calls, "
+				   "usages, etc.) are resolved by name, which is "
+				   "imprecise but much faster than in-depth indexing.<br />"
+				   "<i>Hint: Use this option for a quick first indexing pass and start browsing "
+				   "the code base "
+				   "while running a second pass for in-depth indexing.<br /><br />"
+				 : "")));
 	helpButton->setColor(Qt::white);
 	modeTitleLayout->addWidget(helpButton);
 
@@ -96,6 +106,17 @@ QtIndexingStartDialog::QtIndexingStartDialog(
 	for (RefreshMode mode: enabledModes)
 	{
 		m_refreshModeButtons[mode]->setEnabled(true);
+	}
+
+	if (enabledShallowOption)
+	{
+		QCheckBox* shallowIndexingCheckBox = new QCheckBox(
+			QStringLiteral("Shallow Python Indexing"));
+		connect(shallowIndexingCheckBox, &QCheckBox::toggled, [=, this]() {
+			emit setShallowIndexing(shallowIndexingCheckBox->isChecked());
+		});
+		shallowIndexingCheckBox->setChecked(initialShallowState);
+		modeLayout->addWidget(shallowIndexingCheckBox);
 	}
 
 	subLayout->addLayout(modeLayout);

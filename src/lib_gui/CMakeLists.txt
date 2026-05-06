@@ -1,4 +1,5 @@
 add_library(Sourcetrail_lib_gui
+	${CMAKE_CURRENT_BINARY_DIR}/productVersion.h
 	${CMAKE_CURRENT_BINARY_DIR}/licenses.h
 
 	platform/setupApp.h
@@ -208,8 +209,8 @@ add_library(Sourcetrail_lib_gui
 	qt/utility/QtMessageBox.cpp
 	qt/utility/QtScrollSpeedChangeListener.cpp
 	qt/utility/QtScrollSpeedChangeListener.h
-	qt/utility/QtThreadedFunctor.h
 	qt/utility/QtThreadedFunctor.cpp
+	qt/utility/QtThreadedFunctor.h
 	qt/utility/QtWindowTitleProgress.cpp
 	qt/utility/QtWindowTitleProgress.h
 	qt/utility/utilityQt.cpp
@@ -440,6 +441,19 @@ if (BUILD_JAVA_LANGUAGE_PACKAGE)
 			utility/path_detector/java_runtime
 			utility/path_detector/jre_system_library
 			utility/path_detector/maven_executable
+	)
+endif()
+
+if (BUILD_PYTHON_LANGUAGE_PACKAGE)
+	target_sources(Sourcetrail_lib_gui
+		PRIVATE
+			qt/project_wizard/content/path/QtProjectWizardContentPathPythonEnvironment.cpp
+			qt/project_wizard/content/path/QtProjectWizardContentPathPythonEnvironment.h
+	)
+
+	target_include_directories(Sourcetrail_lib_gui
+		PUBLIC
+			qt/project_wizard/content/path
 	)
 endif()
 

@@ -143,6 +143,8 @@ private:
 	QtLocationPicker* m_javaPath;
 	QtPathListBox* m_jreSystemLibraryPaths;
 	QtLocationPicker* m_mavenPath;
+
+	QCheckBox* m_pythonPostProcessing;
 };
 
 #endif	  // QT_PROJECT_WIZARD_CONTENT_PREFERENCES_H

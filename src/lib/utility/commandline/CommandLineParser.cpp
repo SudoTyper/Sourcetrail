@@ -228,6 +228,11 @@ void CommandLineParser::incompleteRefresh()
 	m_refreshMode = RefreshMode::UPDATED_AND_INCOMPLETE_FILES;
 }
 
+void CommandLineParser::setShallowIndexingRequested(bool enabled)
+{
+	m_shallowIndexingRequested = enabled;
+}
+
 const FilePath& CommandLineParser::getProjectFilePath() const
 {
 	return m_projectFile;
@@ -236,6 +241,11 @@ const FilePath& CommandLineParser::getProjectFilePath() const
 RefreshMode CommandLineParser::getRefreshMode() const
 {
 	return m_refreshMode;
+}
+
+bool CommandLineParser::getShallowIndexingRequested() const
+{
+	return m_shallowIndexingRequested;
 }
 
 }	 // namespace commandline

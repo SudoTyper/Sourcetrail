@@ -22,8 +22,8 @@
 #include "SourceGroupFactoryModuleCustom.h"
 #include "language_packages.h"
 #include "utilityQt.h"
-#include "Version.h"
 #include "utilityString.h"
+#include "Version.h"
 
 #if BUILD_CXX_LANGUAGE_PACKAGE
 	#include "LanguagePackageCxx.h"
@@ -35,19 +35,16 @@
 	#include "SourceGroupFactoryModuleJava.h"
 #endif	  // BUILD_JAVA_LANGUAGE_PACKAGE
 
+#if BUILD_PYTHON_LANGUAGE_PACKAGE
+	#include "SourceGroupFactoryModulePython.h"
+#endif	  // BUILD_PYTHON_LANGUAGE_PACKAGE
+
 #if BOOST_OS_WINDOWS
 	#include <windows.h>
 #endif
 
-#include <QByteArray>
-#include <QtEnvironmentVariables>
-
 #include <csignal>
 #include <iostream>
-
-using namespace utility;
-using namespace std;
-using namespace boost::filesystem;
 
 void closeConsoleWindow()
 {
@@ -74,10 +71,9 @@ void signalHandler(int  /*signum*/)
 	MessageIndexingInterrupted().dispatch();
 }
 
-static void setupLogging(const ApplicationSettings *settings)
+void setupLogging()
 {
-	std::shared_ptr<LogManager> logManager = LogManager::getInstance();
-	logManager->setLoggingEnabled(settings->getLoggingEnabled());
+	LogManager* logManager = LogManager::getInstance().get();
 
 	std::shared_ptr<ConsoleLogger> consoleLogger = std::make_shared<ConsoleLogger>();
 	consoleLogger->setLogLevel(Logger::LOG_ALL);
@@ -85,11 +81,8 @@ static void setupLogging(const ApplicationSettings *settings)
 
 	std::shared_ptr<FileLogger> fileLogger = std::make_shared<FileLogger>();
 	fileLogger->setLogLevel(Logger::LOG_ALL);
-	fileLogger->setLogDirectory(settings->getLogDirectoryPath());
-	fileLogger->setFileName(FileLogger::generateDatedFileName("log"));
-	logManager->addLogger(fileLogger);
-
 	fileLogger->deleteLogFiles(FileLogger::generateDatedFileName("log", -30));
+	logManager->addLogger(fileLogger);
 }
 
 void addLanguagePackages()
@@ -104,6 +97,10 @@ void addLanguagePackages()
 	SourceGroupFactory::getInstance()->addModule(std::make_shared<SourceGroupFactoryModuleJava>());
 #endif	  // BUILD_JAVA_LANGUAGE_PACKAGE
 
+#if BUILD_PYTHON_LANGUAGE_PACKAGE
+	SourceGroupFactory::getInstance()->addModule(std::make_shared<SourceGroupFactoryModulePython>());
+#endif	  // BUILD_PYTHON_LANGUAGE_PACKAGE
+
 #if BUILD_CXX_LANGUAGE_PACKAGE
 	LanguagePackageManager::getInstance()->addPackage(std::make_shared<LanguagePackageCxx>());
 #endif	  // BUILD_CXX_LANGUAGE_PACKAGE
@@ -115,26 +112,18 @@ void addLanguagePackages()
 
 int main(int argc, char* argv[])
 {
-	setupDefaultLocale();
+	utility::setupDefaultLocale();
 
-	// Must get the correct directory for:
-	// Windows: 'Sourcetrail' (doesn't exist, so canonical() would fail!)
-	// Windows: 'Sourcetrail.exe'
-	// Linux:   './Sourcetrail'
-
-	const path appDirectory = weakly_canonical(argv[0]).parent_path();
-	setupAppDirectories(appDirectory.generic_string());
-
-	if constexpr (utility::Platform::isLinux())
-	{
-		if (qgetenv("SOURCETRAIL_VIA_SCRIPT").isNull())
-		{
-			std::cout << "ERROR: Please run Sourcetrail via the Sourcetrail.sh script!" << std::endl;
-		}
-	}
+	setupAppDirectories(FilePath(argv[0]).getCanonical().getParentDirectory());
 	const Version version = Version::getApplicationVersion();
-	MessageStatus("Starting Sourcetrail version "s + version.toDisplayString()).dispatch();
-	MessageStatus("Setting application directory: "s + appDirectory.generic_string()).dispatch();
+
+	if (utility::Platform::isLinux() && std::getenv("SOURCETRAIL_VIA_SCRIPT") == nullptr)
+	{
+		std::cout << "ERROR: Please run Sourcetrail via the Sourcetrail.sh script!" << std::endl;
+	}
+
+	MessageStatus(std::string("Starting Sourcetrail version ") + version.toDisplayString())
+		.dispatch();
 
 	commandline::CommandLineParser commandLineParser(version.toDisplayString());
 	commandLineParser.preparse(argc, argv);
@@ -151,10 +140,9 @@ int main(int argc, char* argv[])
 		[[maybe_unused]]
 		QtCoreApplication qtApp(argc, argv);
 
-		Application::createInstance(nullptr, nullptr);
-		shared_ptr<ApplicationSettings> appSettings = ApplicationSettings::getInstance();
+		setupLogging();
 
-		setupLogging(appSettings.get());
+		Application::createInstance(version, nullptr, nullptr);
 		
 		[[maybe_unused]]
 		ScopedFunctor f([]()
@@ -162,7 +150,7 @@ int main(int argc, char* argv[])
 			Application::destroyInstance();
 		});
 
-		ApplicationSettingsPrefiller::prefillPaths(appSettings.get());
+		ApplicationSettingsPrefiller::prefillPaths(ApplicationSettings::getInstance().get());
 		addLanguagePackages();
 
 		signal(SIGINT, signalHandler);
@@ -182,7 +170,12 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			MessageLoadProject(commandLineParser.getProjectFilePath(), false, commandLineParser.getRefreshMode()).dispatch();
+			MessageLoadProject(
+				commandLineParser.getProjectFilePath(),
+				false,
+				commandLineParser.getRefreshMode(),
+				commandLineParser.getShallowIndexingRequested())
+				.dispatch();
 		}
 
 		return QtCoreApplication::exec();
@@ -192,22 +185,22 @@ int main(int argc, char* argv[])
 		[[maybe_unused]]
 		QtApplication qtApp(argc, argv);
 
+		setupLogging();
+
 		QtViewFactory viewFactory;
 		QtNetworkFactory networkFactory;
 
-		Application::createInstance(&viewFactory, &networkFactory);
-		shared_ptr<ApplicationSettings> appSettings = ApplicationSettings::getInstance();
-
-		setupLogging(appSettings.get());
-
+		Application::createInstance(version, &viewFactory, &networkFactory);
+		
 		[[maybe_unused]]
 		ScopedFunctor f([]()
 		{
 			Application::destroyInstance();
 		});
 
-		ApplicationSettingsPrefiller::prefillPaths(appSettings.get());
-		if (!appSettings->getLoggingEnabled())
+		auto applicationSettings = ApplicationSettings::getInstance();
+		ApplicationSettingsPrefiller::prefillPaths(applicationSettings.get());
+		if (!applicationSettings->getLoggingEnabled())
 			closeConsoleWindow();
 
 		addLanguagePackages();

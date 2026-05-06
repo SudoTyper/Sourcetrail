@@ -50,6 +50,8 @@ public:
 		Project* project,
 		const std::vector<RefreshMode>& enabledModes,
 		const RefreshMode initialMode,
+		bool enabledShallowOption,
+		bool shallow,
 		std::function<void(const RefreshInfo& info)> onStartIndexing,
 		std::function<void()> onCancelIndexing);
 	virtual void updateIndexingDialog(
@@ -69,7 +71,8 @@ public:
 		size_t totalFileCount,
 		float time,
 		ErrorCountInfo errorInfo,
-		bool interrupted);
+		bool interrupted,
+		bool shallow);
 
 	int confirm(const std::string& message);
 	virtual int confirm(const std::string& message, const std::vector<std::string>& options);

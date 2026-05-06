@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.27)
 
-# Vcpkg ------------------------------------------------------------------------
+include(CMakePrintHelpers)
+include(cmake/Sourcetrail.cmake)
 
+# Detect vcpkg build scenario here, so we don't depend on CMakePresets settings:
 if (CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg.cmake$")
 	message(STATUS "Vcpkg Build")
 	set(isVcpkgBuild TRUE)
@@ -24,17 +26,6 @@ if (isVcpkgBuild)
 	)
 endif()
 
-# Project ----------------------------------------------------------------------
-
-project(Sourcetrail VERSION 2026.4.30 HOMEPAGE_URL "http://sourcetrail.de")
-
-configure_file(cmake/productVersion.h.in src/lib/productVersion.h)
-
-# cmake_print_variables(CMAKE_CXX_COMPILER)
-
-include(CMakePrintHelpers)
-include(cmake/Sourcetrail.cmake)
-
 # Make the build type available as a compiler variable:
 if (isVcpkgBuild)
 	add_compile_definitions(IS_VCPKG_BUILD=1)
@@ -42,32 +33,25 @@ else()
 	add_compile_definitions(IS_VCPKG_BUILD=0)
 endif()
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-	# https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html
-	# CMakeCache.txt entry: "-O3 -DNDEBUG"
-	set(CMAKE_CXX_FLAGS_RELEASE        "${CMAKE_CXX_FLAGS_RELEASE} -O3 -fno-fast-math -flto=auto")
-	set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto=auto")
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-	# https://learn.microsoft.com/en-us/cpp/build/optimization-best-practices
-	# CMakeCache.txt entry: "/O2 /Ob2 /DNDEBUG"
-	set(CMAKE_CXX_FLAGS_RELEASE        "${CMAKE_CXX_FLAGS_RELEASE} /O2 /Gy /GL /fp:precise /GS-")
-	set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG /OPT:REF,ICF")
+# Project ----------------------------------------------------------------------
 
-	# For profiling:
-	#set(CMAKE_CXX_FLAGS_RELEASE        "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
-	#set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG")
-endif()
+project(Sourcetrail VERSION 2025.11.21 HOMEPAGE_URL "http://sourcetrail.de")
+cmake_print_variables(CMAKE_C_COMPILER)
+cmake_print_variables(CMAKE_CXX_COMPILER)
 
-#cmake_print_variables(CMAKE_CXX_FLAGS_RELEASE CMAKE_EXE_LINKER_FLAGS_RELEASE)
-#cmake_print_variables(CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO)
 
 # Configure which language(s)/package(s) should be supported:
-option(BUILD_CXX_LANGUAGE_PACKAGE  "Add C/C++ support to the Sourcetrail indexer." OFF)
-option(BUILD_JAVA_LANGUAGE_PACKAGE "Add Java support to the Sourcetrail indexer." OFF)
-option(BUILD_UNIT_TESTS_PACKAGE    "Build the corresponding language unit tests." OFF)
+option(BUILD_CXX_LANGUAGE_PACKAGE    "Add C/C++ support to the Sourcetrail indexer." OFF)
+option(BUILD_JAVA_LANGUAGE_PACKAGE   "Add Java support to the Sourcetrail indexer." OFF)
+option(BUILD_PYTHON_LANGUAGE_PACKAGE "Add Python support to the Sourcetrail indexer." OFF)
+option(BUILD_UNIT_TESTS_PACKAGE      "Build the corresponding language unit tests." OFF)
 
 configure_file(cmake/language_packages.h.in src/lib/language_packages.h)
 
+# prohibit in-source-builds
+if (${CMAKE_BINARY_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
+	message(FATAL_ERROR "In-source-builds are not supported!")
+endif()
 
 # Make Ninja build verbose as well (https://github.com/ninja-build/ninja/issues/900):
 if (CMAKE_VERBOSE_MAKEFILE)
@@ -93,11 +77,11 @@ endif()
 # https://cmake.org/cmake/help/latest/prop_tgt/C_STANDARD.html
 # https://cmake.org/cmake/help/latest/prop_tgt/CXX_STANDARD.html
 
-set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -322,6 +306,8 @@ add_subdirectory(src/external)
 
 # Lib Gui ----------------------------------------------------------------------
 
+configure_file(cmake/productVersion.h.in src/lib_gui/productVersion.h)
+
 add_subdirectory(src/resources)
 add_subdirectory(src/lib_gui)
 
@@ -357,7 +343,7 @@ if (BUILD_CXX_LANGUAGE_PACKAGE)
 	set(CLANG_MAX_VERSION 21)
 	
 	find_package(Clang CONFIG REQUIRED) # Minimum version and/or version range xx...<yy doesn't work.
-	message(STATUS "Found LLVM: ${LLVM_VERSION}") # ${LLVM_INSTALL_PREFIX} ${CLANG_INSTALL_PREFIX}")
+	message(STATUS "Found LLVM ${LLVM_VERSION}: ${LLVM_INCLUDE_DIRS}")
 	checkVersionRange("Clang" ${LLVM_VERSION} ${CLANG_MIN_VERSION} ${CLANG_MAX_VERSION})
 
 	add_library(External_lib_clang INTERFACE)
@@ -373,52 +359,53 @@ if (BUILD_CXX_LANGUAGE_PACKAGE)
 			${CLANG_INCLUDE_DIRS}
 	)
 	
-	# 'LLVM_LINK_LLVM_DYLIB' is set when LLVM has been build into a single shared library i.e. 'libLLVM'
-	# 'CLANG_LINK_CLANG_DYLIB' is set when Clang has been build into a single shared library i.e. 'libclang-cpp'
+	# 'LLVM_LINK_LLVM_DYLIB' is set when LLVM/Clang have been build into seperate single libraries.
+	# Apparently this means for LLVM 'libLLVM' and for Clang 'libclang-cpp'.
+	# For further details see https://llvm.org/docs/CMake.html#embedding-llvm-in-your-project
 	
-	if (LLVM_LINK_LLVM_DYLIB AND CLANG_LINK_CLANG_DYLIB)
-		target_link_libraries(External_lib_clang
-			INTERFACE
-				LLVM
-				clang-cpp
+	if (LLVM_LINK_LLVM_DYLIB) # Should be CLANG_LINK_CLANG_DYLIB in future LLVM releases?
+		set(llvmLibraries LLVM)
+		set(clangLibraries clang-cpp)
+	else()
+		llvm_map_components_to_libnames(llvmLibraries
+			${LLVM_TARGETS_TO_BUILD} support core libdriver passes option
 		)
-	else()
-		llvm_map_components_to_libnames(llvmLibraries ${LLVM_TARGETS_TO_BUILD} support core libdriver passes option)
-		target_link_libraries(External_lib_clang
-			INTERFACE
-				${llvmLibraries}
-				
-				# LibTooling libraries:
-				
-				clangASTMatchers
-				clangFrontend
-				clangSerialization
-				clangDriver
-				clangTooling
-				clangParse
-				clangSema
-				clangStaticAnalyzerFrontend
-				clangStaticAnalyzerCheckers
-				clangStaticAnalyzerCore
-				clangAnalysis
-				clangRewriteFrontend
-				clangEdit
-				clangAST
-				clangLex
-				clangBasic
-			)
+		# LibTooling libraries:
+		set(clangLibraries
+			clangASTMatchers
+			clangFrontend
+			clangSerialization
+			clangDriver
+			clangTooling
+			clangParse
+			clangSema
+			clangStaticAnalyzerFrontend
+			clangStaticAnalyzerCheckers
+			clangStaticAnalyzerCore
+			clangAnalysis
+			clangRewriteFrontend
+			clangEdit
+			clangAST
+			clangLex
+			clangBasic
+		)
 	endif()
+		
+	target_link_libraries(External_lib_clang
+		INTERFACE
+			${llvmLibraries}
+			${clangLibraries}
+	)
 	
-	# Copy required header:
-
+	# Copy required headers:
 	if (isVcpkgBuild)
-		cmake_path(SET headerSourceDir NORMALIZE "${CLANG_INSTALL_PREFIX}/tools/llvm/lib/clang/${LLVM_VERSION_MAJOR}/include/")
+		set(headerSourceDir "${LLVM_TOOLS_BINARY_DIR}/lib/clang/${LLVM_VERSION_MAJOR}/include/")
 	else()
-		cmake_path(SET headerSourceDir NORMALIZE "${CLANG_INSTALL_PREFIX}/lib/clang/${LLVM_VERSION_MAJOR}/include/")
+		set(headerSourceDir "${LLVM_TOOLS_BINARY_DIR}/../lib/clang/${LLVM_VERSION_MAJOR}/include/")
 	endif()
-	cmake_path(SET headerTargetDir NORMALIZE "${CMAKE_BINARY_DIR}/app/data/cxx/include/")
+	set(headerTargetDir "${CMAKE_BINARY_DIR}/app/data/cxx/include/")
 
-	message(STATUS "Copying Clang header: ${headerSourceDir} -> ${headerTargetDir}")
+	message(STATUS "Copying LLVM header: ${headerSourceDir} -> ${headerTargetDir}")
 	file(COPY "${headerSourceDir}" DESTINATION "${headerTargetDir}")
 	
 	add_subdirectory(src/lib_cxx)
@@ -451,6 +438,20 @@ else()
 	message(STATUS "Building the Java indexer is disabled. You can enable it by setting 'BUILD_JAVA_LANGUAGE_PACKAGE' to 'ON'.")
 endif()
 
+# Lib Python -------------------------------------------------------------------
+
+if (BUILD_PYTHON_LANGUAGE_PACKAGE)
+	message(WARNING "Python indexer is in a prototype state!")
+	
+	# Bash:
+	find_program(BASH_COMMAND NAMES "bash" REQUIRED)
+	message(STATUS "Found Bash: ${BASH_COMMAND}")
+
+	add_subdirectory(src/lib_python)
+else()
+	message(STATUS "Building the Python indexer is disabled. You can enable it by setting 'BUILD_PYTHON_LANGUAGE_PACKAGE' to 'ON'.")
+endif()
+
 # Indexer App ------------------------------------------------------------------
 
 add_subdirectory(src/indexer)
@@ -459,9 +460,8 @@ add_subdirectory(src/indexer)
 
 configure_file(src/app/Sourcetrail.ico app/Sourcetrail.ico COPYONLY)
 if (UNIX)
-	configure_file(scripts/Sourcetrail.sh      app/Sourcetrail.sh COPYONLY)
-	configure_file(scripts/resetPreferences.sh app/resetPreferences.sh COPYONLY)
-	configure_file(scripts/_gdbinit            app/.gdbinit COPYONLY)
+	configure_file(scripts/Sourcetrail.sh  app/Sourcetrail.sh COPYONLY)
+	configure_file(scripts/_gdbinit        app/.gdbinit COPYONLY)
 endif()
 add_subdirectory(src/app)
 
@@ -487,28 +487,13 @@ else()
 	message(STATUS "Building the tests is disabled. You can enable them by setting 'BUILD_UNIT_TESTS_PACKAGE' to 'ON'.")
 endif()
 
-# Create license information:
-include(cmake/licenses.cmake)
-configureLicenseFile(src/lib_gui/licenses.h)
-
-# Some sanity checks:
-# Note: We doing these checks last so the messages are at the end of a possible long output from cmake.
-
-if (NOT BUILD_CXX_LANGUAGE_PACKAGE AND NOT BUILD_JAVA_LANGUAGE_PACKAGE)
+if (NOT BUILD_CXX_LANGUAGE_PACKAGE AND NOT BUILD_JAVA_LANGUAGE_PACKAGE AND NOT BUILD_PYTHON_LANGUAGE_PACKAGE)
 	message(WARNING "Building ONLY the GUI, because all language indexers are disabled!")
 endif()
 
-# prohibit in-source-builds
-if (${CMAKE_BINARY_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
-	message(FATAL_ERROR "In-source-builds are not supported!")
-endif()
-
-if (BUILD_PYTHON_LANGUAGE_PACKAGE)
-	message(FATAL_ERROR "Python support has been removed!")
-	# See:
-	# - https://github.com/petermost/Sourcetrail/issues/34
-	# - https://github.com/CoatiSoftware/SourcetrailPythonIndexer
-endif()
+# Create license information:
+include(cmake/licenses.cmake)
+configureLicenseFile(src/lib_gui/licenses.h)
 
 # Enable this code to find out *all* imported targets:
 # get_property(importedTargets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY IMPORTED_TARGETS)
