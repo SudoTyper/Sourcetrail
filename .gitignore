@@ -15,3 +15,6 @@ CMakeLists.txt.user
 *.srctrldb
 *-shm
 *-wal
+
+build/
+compile_commands.json
